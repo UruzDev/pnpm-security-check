@@ -1,0 +1,62 @@
+name: PNPM + Socket.dev Security Check
+description: |
+  Reusable GitHub Action that runs `pnpm audit` and `socket protect`,
+  then comments on the pull request if issues are found.
+
+author: UruzDev
+
+inputs:
+  github_token:
+    required: true
+    description: GitHub token for commenting on PRs
+
+runs:
+  using: "composite"
+  steps:
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Install dependencies with pnpm
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Install Socket CLI
+      shell: bash
+      run: pnpm add -g @socketsecurity/cli
+
+    - name: Run pnpm audit and save output
+      id: pnpm_audit
+      shell: bash
+      run: |
+        pnpm audit --severity high > pnpm-audit.txt || true
+
+    - name: Run Socket protect and save output
+      id: socket_scan
+      shell: bash
+      run: |
+        socket protect > socket-output.txt || true
+
+    - name: Post comment if issues are found
+      if: always()
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      run: |
+        audit_output=$(cat pnpm-audit.txt)
+        socket_output=$(cat socket-output.txt)
+        comment="### 🛡 Security Audit Report\n"
+
+        if grep -q "Severity" pnpm-audit.txt; then
+          comment+="\n**🔍 pnpm audit found issues:**\n\`\`\`\n$audit_output\n\`\`\`"
+        fi
+
+        if grep -q "Detected" socket-output.txt || grep -q "Risky" socket-output.txt; then
+          comment+="\n\n**🧪 Socket.dev scan found suspicious packages:**\n\`\`\`\n$socket_output\n\`\`\`"
+        fi
+
+        if [ "$comment" != "### 🛡 Security Audit Report\n" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body "$comment"
+          echo "Security issues found. Failing the build."
+          exit 1
+        fi
