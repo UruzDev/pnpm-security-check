@@ -37,6 +37,6 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
-      - uses: your-org/pnpm-security-check@v1
+      - uses: UruzDev/pnpm-security-check@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
